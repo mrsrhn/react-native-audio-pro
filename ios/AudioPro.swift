@@ -351,6 +351,7 @@ class AudioPro: RCTEventEmitter {
 
 		let album = track["album"] as? String
 		let artist = track["artist"] as? String
+		let isLiveStream = track["isLiveStream"] as? Bool ?? false
 
 		// Update now playing info without resetting the entire dictionary
 		var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [String: Any]()
@@ -360,6 +361,10 @@ class AudioPro: RCTEventEmitter {
 		}
 		if let artist = artist {
 			nowPlayingInfo[MPMediaItemPropertyArtist] = artist
+		}
+		if isLiveStream {
+			nowPlayingInfo[MPNowPlayingInfoPropertyIsLiveStream] = true
+        	nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = 0
 		}
 		MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
 

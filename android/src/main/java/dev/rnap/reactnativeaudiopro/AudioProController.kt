@@ -238,6 +238,7 @@ object AudioProController {
 		val artist = track.getString("artist") ?: "Unknown Artist"
 		val album = track.getString("album") ?: "Unknown Album"
 		val artwork = track.getString("artwork")?.toUri()
+		val isLiveStream = track.hasKey("isLiveStream") && track.getBoolean("isLiveStream")
 
 		val metadataBuilder = MediaMetadata.Builder()
 			.setTitle(title)
@@ -246,6 +247,11 @@ object AudioProController {
 
 		if (artwork != null) {
 			metadataBuilder.setArtworkUri(artwork)
+		}
+
+		// Mark as live stream if specified
+		if (isLiveStream) {
+			metadataBuilder.setMediaType(MediaMetadata.MEDIA_TYPE_RADIO_STATION)
 		}
 
 		// Process custom headers if provided
