@@ -30,6 +30,7 @@ class AudioPro: RCTEventEmitter {
 	private let EVENT_TYPE_REMOTE_NEXT = "REMOTE_NEXT"
 	private let EVENT_TYPE_REMOTE_PREV = "REMOTE_PREV"
 	private let EVENT_TYPE_PLAYBACK_SPEED_CHANGED = "PLAYBACK_SPEED_CHANGED"
+	private let EVENT_TYPE_METADATA_RECEIVED = "METADATA_RECEIVED"
 
 	// Seek trigger sources
 	private let TRIGGER_SOURCE_USER = "USER"
@@ -53,6 +54,7 @@ class AudioPro: RCTEventEmitter {
 
 	private var isRateObserverAdded = false
 	private var isStatusObserverAdded = false
+	private var isTimedMetadataObserverAdded = false
 
 	private var currentPlaybackSpeed: Float = 1.0
 	private var currentTrack: NSDictionary?
@@ -272,9 +274,15 @@ class AudioPro: RCTEventEmitter {
 				player.removeObserver(self, forKeyPath: "rate")
 				isRateObserverAdded = false
 			}
-			if let currentItem = player.currentItem, isStatusObserverAdded {
-				currentItem.removeObserver(self, forKeyPath: "status")
-				isStatusObserverAdded = false
+			if let currentItem = player.currentItem {
+				if isStatusObserverAdded {
+					currentItem.removeObserver(self, forKeyPath: "status")
+					isStatusObserverAdded = false
+				}
+				if isTimedMetadataObserverAdded {
+					currentItem.removeObserver(self, forKeyPath: "timedMetadata")
+					isTimedMetadataObserverAdded = false
+				}
 			}
 		}
 
@@ -400,6 +408,10 @@ class AudioPro: RCTEventEmitter {
 		// Add observer to the new item
 		item.addObserver(self, forKeyPath: "status", options: [.new], context: nil)
 		isStatusObserverAdded = true
+		
+		// Add observer for timed metadata
+		item.addObserver(self, forKeyPath: "timedMetadata", options: [.new], context: nil)
+		isTimedMetadataObserverAdded = true
 
 		// Create the AVPlayer if it doesn't exist, otherwise just replace the item
 		if player == nil {
@@ -644,9 +656,15 @@ class AudioPro: RCTEventEmitter {
 				player.removeObserver(self, forKeyPath: "rate")
 				isRateObserverAdded = false
 			}
-			if let currentItem = player.currentItem, isStatusObserverAdded {
-				currentItem.removeObserver(self, forKeyPath: "status")
-				isStatusObserverAdded = false
+			if let currentItem = player.currentItem {
+				if isStatusObserverAdded {
+					currentItem.removeObserver(self, forKeyPath: "status")
+					isStatusObserverAdded = false
+				}
+				if isTimedMetadataObserverAdded {
+					currentItem.removeObserver(self, forKeyPath: "timedMetadata")
+					isTimedMetadataObserverAdded = false
+				}
 			}
 		}
 
@@ -911,9 +929,70 @@ class AudioPro: RCTEventEmitter {
 					}
 				}
 			}
+		case "timedMetadata":
+			if let item = object as? AVPlayerItem {
+				handleTimedMetadata(item.timedMetadata)
+			}
 		default:
 			super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
 		}
+	}
+
+	////////////////////////////////////////////////////////////
+	// MARK: - Metadata Handling
+	////////////////////////////////////////////////////////////
+
+	private func handleTimedMetadata(_ metadataItems: [AVMetadataItem]?) {
+		guard let metadataItems = metadataItems, !metadataItems.isEmpty else {
+			return
+		}
+
+		log("Received timed metadata with \(metadataItems.count) items")
+
+		var metadata: [String: Any] = [:]
+
+		for item in metadataItems {
+			// Get the key identifier
+			let key: String
+			if let commonKey = item.commonKey {
+				key = commonKey.rawValue
+			} else if let identifier = item.identifier {
+				key = identifier.rawValue
+			} else if let keyString = item.key as? String {
+				key = keyString
+			} else {
+				continue
+			}
+
+			// Get the value
+			if let value = item.value {
+				if let stringValue = value as? String {
+					metadata[key] = stringValue
+				} else if let numberValue = value as? NSNumber {
+					metadata[key] = numberValue
+				} else if let dataValue = value as? Data {
+					// Convert data to base64 string for transmission
+					metadata[key] = dataValue.base64EncodedString()
+				} else {
+					metadata[key] = "\(value)"
+				}
+			}
+		}
+
+		if !metadata.isEmpty {
+			emitMetadataReceived(metadata)
+		}
+	}
+
+	private func emitMetadataReceived(_ metadata: [String: Any]) {
+		guard hasListeners else { return }
+
+		log("Emitting metadata:", metadata)
+
+		let payload: [String: Any] = [
+			"metadata": metadata
+		]
+		sendEvent(type: EVENT_TYPE_METADATA_RECEIVED, track: currentTrack, payload: payload)
 	}
 
 	////////////////////////////////////////////////////////////

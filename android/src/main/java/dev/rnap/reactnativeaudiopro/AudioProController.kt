@@ -719,9 +719,20 @@ object AudioProController {
 				// 2. Emit STATE_CHANGED: ERROR
 				resetInternal(AudioProModule.STATE_ERROR)
 			}
+
 		}
 
 		enginerBrowser?.addListener(enginePlayerListener!!)
+	}
+
+	/**
+	 * Handle metadata from the service's ExoPlayer instance
+	 * This is called from the AudioProPlaybackService
+	 */
+	@JvmStatic
+	fun handleMetadataFromService(metadata: androidx.media3.common.Metadata) {
+		log("handleMetadataFromService", "metadata items=", metadata.length())
+		handleMetadata(metadata)
 	}
 
 	private fun startProgressTimer() {
@@ -873,6 +884,71 @@ object AudioProController {
 			putString("state", flowLastEmittedState)
 		}
 		emitEvent(AudioProModule.EVENT_TYPE_REMOTE_PREV, activeTrack, payload, reason)
+	}
+
+	private fun handleMetadata(metadata: androidx.media3.common.Metadata) {
+		val metadataMap = Arguments.createMap()
+		
+		log("Processing metadata with ${metadata.length()} entries")
+		
+		for (i in 0 until metadata.length()) {
+			val entry = metadata.get(i)
+			log("Metadata entry $i: ${entry.javaClass.simpleName}")
+			
+			try {
+				when (entry) {
+					is androidx.media3.extractor.metadata.icy.IcyInfo -> {
+						log("ICY metadata - title: ${entry.title}, url: ${entry.url}")
+						entry.title?.let { metadataMap.putString("title", it) }
+						entry.url?.let { metadataMap.putString("url", it) }
+					}
+					is androidx.media3.extractor.metadata.id3.TextInformationFrame -> {
+						val key = entry.id
+						val value = entry.values.joinToString()
+						log("ID3 TextInformationFrame - $key: $value")
+						metadataMap.putString(key, value)
+					}
+					is androidx.media3.extractor.metadata.id3.UrlLinkFrame -> {
+						log("ID3 UrlLinkFrame - ${entry.id}: ${entry.url}")
+						metadataMap.putString(entry.id, entry.url)
+					}
+					is androidx.media3.extractor.metadata.id3.CommentFrame -> {
+						log("ID3 CommentFrame - comment: ${entry.text}")
+						metadataMap.putString("comment", entry.text)
+					}
+					is androidx.media3.extractor.metadata.id3.ApicFrame -> {
+						log("ID3 APIC (artwork) frame - description: ${entry.description}")
+						// Don't include artwork data as it's large, just note it exists
+						metadataMap.putString("hasArtwork", "true")
+						metadataMap.putString("artworkDescription", entry.description ?: "")
+					}
+					else -> {
+						// For any other metadata types, try to convert to string
+						log("Unknown metadata type:", entry.javaClass.simpleName)
+					}
+				}
+			} catch (e: Exception) {
+				log("Error processing metadata entry:", e.message ?: "unknown error")
+			}
+		}
+		
+		log("Metadata map size after processing:", metadataMap.toHashMap().size)
+		
+		// Emit even if empty to indicate metadata was received
+		emitMetadata(metadataMap)
+	}
+
+	private fun emitMetadata(metadata: WritableMap) {
+		log("Emitting METADATA_RECEIVED event with data:", metadata.toHashMap())
+		try {
+			val payload = Arguments.createMap().apply {
+				putMap("metadata", metadata)
+			}
+			emitEvent(AudioProModule.EVENT_TYPE_METADATA_RECEIVED, activeTrack, payload, "metadata")
+			log("METADATA_RECEIVED event emitted successfully")
+		} catch (e: Exception) {
+			log("Error emitting metadata event:", e.message ?: "unknown error")
+		}
 	}
 
 	fun setPlaybackSpeed(speed: Float) {

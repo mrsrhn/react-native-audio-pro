@@ -71,6 +71,7 @@ export interface AudioProEvent {
 		error?: string;
 		errorCode?: number;
 		speed?: number;
+		metadata?: Record<string, unknown>;
 	};
 }
 
@@ -104,6 +105,10 @@ export interface AudioProSeekCompletePayload {
 
 export interface AudioProPlaybackSpeedChangedPayload {
 	speed: number;
+}
+
+export interface AudioProMetadataReceivedPayload {
+	metadata: Record<string, unknown>;
 }
 
 // ==============================

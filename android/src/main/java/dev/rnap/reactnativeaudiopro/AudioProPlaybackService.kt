@@ -205,7 +205,10 @@ open class AudioProPlaybackService : MediaLibraryService() {
 			}
 		}
 
+		// Create media source factory with metadata extraction enabled
 		val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+			// Metadata extraction is enabled by default in DefaultMediaSourceFactory,
+			// but we can customize extractors if needed in the future
 
 		val player =
 			ExoPlayer.Builder(this)
@@ -221,6 +224,15 @@ open class AudioProPlaybackService : MediaLibraryService() {
 		player.setHandleAudioBecomingNoisy(true)
 		player.repeatMode = Player.REPEAT_MODE_OFF
 		player.addAnalyticsListener(EventLogger())
+		
+		// Add metadata listener to relay metadata events to the controller
+		player.addListener(object : Player.Listener {
+			override fun onMetadata(metadata: androidx.media3.common.Metadata) {
+				android.util.Log.d("AudioProPlaybackService", "Metadata received in service: ${metadata.length()} items")
+				// Relay metadata to the controller
+				AudioProController.handleMetadataFromService(metadata)
+			}
+		})
 
 		mediaLibrarySession =
 			MediaLibrarySession.Builder(this, player, createLibrarySessionCallback())

@@ -52,6 +52,7 @@ This document defines the contract between `react-native-audio-pro`'s native med
 | `PLAYBACK_SPEED_CHANGED` | On speed change | ❌ | Emits new rate |
 | `REMOTE_NEXT` / `REMOTE_PREV` | Lock screen buttons | ❌ | Developer's app must handle and call `play()` |
 | `PLAYBACK_ERROR` | On non-fatal error | ❌ | Separate from `STATE_CHANGED: ERROR`; may be emitted independently |
+| `METADATA_RECEIVED` | When metadata arrives from audio stream | ❌ | Emits `metadata` object with stream/file metadata (ICY, ID3, etc.) |
 
 > ⚠️ **Playback errors and playback state are separate**.
 > `PLAYBACK_ERROR` does **not imply** an `ERROR` state.
