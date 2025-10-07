@@ -494,4 +494,38 @@ export const AudioPro = {
 	addAmbientListener(callback: AudioProAmbientEventCallback) {
 		return ambientEmitter.addListener('AudioProAmbientEvent', callback);
 	},
+
+	/**
+	 * Update track metadata during playback
+	 * Useful for live streams where title/artist changes dynamically
+	 *
+	 * @param options - Track options to update
+	 * @param options.title - New title for the track
+	 * @param options.artist - New artist for the track
+	 */
+	updateTrackOptions(options: { title?: string; artist?: string }): void {
+		if (!guardTrackPlaying('updateTrackOptions')) return;
+		if (!isValidPlayerStateForOperation('updateTrackOptions()')) return;
+
+		const { title, artist } = options;
+		if (!title && !artist) {
+			console.warn('[react-native-audio-pro]: updateTrackOptions() called with no title or artist');
+			return;
+		}
+
+		logDebug('AudioPro: updateTrackOptions()', options);
+
+		// Update the internal store with new track info
+		const { trackPlaying, setTrackPlaying } = internalStore.getState();
+		if (trackPlaying) {
+			const updatedTrack = {
+				...trackPlaying,
+				...(title && { title }),
+				...(artist && { artist }),
+			};
+			setTrackPlaying(updatedTrack);
+		}
+
+		NativeAudioPro.updateTrackOptions(options);
+	},
 };

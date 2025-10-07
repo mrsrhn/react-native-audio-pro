@@ -836,6 +836,46 @@ class AudioPro: RCTEventEmitter {
 		player.volume = Float(volume)
 	}
 
+	@objc(updateTrackOptions:)
+	func updateTrackOptions(options: NSDictionary) {
+		guard let currentTrack = currentTrack else {
+			log("Cannot update track options: no track is playing")
+			return
+		}
+
+		let title = options["title"] as? String
+		let artist = options["artist"] as? String
+
+		log("Updating track options - title:", title ?? "nil", "artist:", artist ?? "nil")
+
+		// Create a mutable copy of currentTrack
+		let updatedTrack = NSMutableDictionary(dictionary: currentTrack)
+
+		// Update with new values
+		if let title = title {
+			updatedTrack["title"] = title
+		}
+		if let artist = artist {
+			updatedTrack["artist"] = artist
+		}
+
+		// Update internal state
+		self.currentTrack = updatedTrack
+
+		// Update Now Playing info
+		var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [String: Any]()
+
+		if let title = title {
+			nowPlayingInfo[MPMediaItemPropertyTitle] = title
+		}
+		if let artist = artist {
+			nowPlayingInfo[MPMediaItemPropertyArtist] = artist
+		}
+
+		MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+		log("Now playing info updated with new metadata")
+	}
+
 	////////////////////////////////////////////////////////////
 	// MARK: - KVO & Notification Handlers
 	////////////////////////////////////////////////////////////

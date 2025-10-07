@@ -39,6 +39,7 @@ object AudioProController {
 	private var flowLastEmittedState: String = ""
 	private var flowLastStateEmittedTimeMs: Long = 0L
 	private var flowPendingSeekPosition: Long? = null
+	private var flowSuppressStateEmission: Boolean = false
 
 	private var settingDebug: Boolean = false
 	private var settingDebugIncludesProgress: Boolean = false
@@ -201,6 +202,7 @@ object AudioProController {
 		flowPendingSeekPosition = null
 		flowIsInErrorState = false
 		flowLastEmittedState = ""
+		flowSuppressStateEmission = false
 	}
 
 	suspend fun play(track: ReadableMap, options: ReadableMap) {
@@ -390,6 +392,8 @@ object AudioProController {
 
 		// Clear pending seek state
 		flowPendingSeekPosition = null
+		// Reset state suppression flag
+		flowSuppressStateEmission = false
 
 		// Stop playback and ensure player is fully released before destroying service
 		runOnUiThread {
@@ -799,6 +803,12 @@ object AudioProController {
 	}
 
 	private fun emitState(state: String, position: Long, duration: Long, reason: String = "") {
+		// Suppress state emissions during metadata updates
+		if (flowSuppressStateEmission) {
+			log("Suppressing state emission during metadata update:", state, "reason=", reason)
+			return
+		}
+
 		val sanitizedPosition = if (position < 0) 0L else position
 		val sanitizedDuration = if (duration < 0) 0L else duration
 		log(
@@ -976,6 +986,78 @@ object AudioProController {
 		runOnUiThread {
 			log("Setting volume to", volume)
 			enginerBrowser?.setVolume(volume)
+		}
+	}
+
+	fun updateTrackOptions(options: ReadableMap) {
+		val title = if (options.hasKey("title")) options.getString("title") else null
+		val artist = if (options.hasKey("artist")) options.getString("artist") else null
+
+		log("Updating track options - title:", title, "artist:", artist)
+
+		// Update activeTrack with new metadata
+		activeTrack?.let { track ->
+			val updatedTrack = Arguments.createMap()
+			// Copy existing track data
+			val trackMap = track.toHashMap()
+			for ((key, value) in trackMap) {
+				when (value) {
+					is String -> updatedTrack.putString(key, value)
+					is Boolean -> updatedTrack.putBoolean(key, value)
+					is Double -> updatedTrack.putDouble(key, value)
+					is Int -> updatedTrack.putInt(key, value)
+					else -> updatedTrack.putString(key, value.toString())
+				}
+			}
+
+			// Update with new values
+			title?.let { updatedTrack.putString("title", it) }
+			artist?.let { updatedTrack.putString("artist", it) }
+
+			activeTrack = updatedTrack
+			log("Track metadata updated in internal state")
+		}
+
+		// Due to a Media3 limitation (see https://github.com/androidx/media/issues/33),
+		// updating MediaItem metadata requires replacing it, which briefly interrupts playback.
+		// We minimize the impact by:
+		// 1. Suppressing state change emissions to JS (prevents UI flicker)
+		// 2. Immediately restoring position and play state
+		// 3. Re-enabling state emissions after the operation completes
+		runOnUiThread {
+			try {
+				enginerBrowser?.currentMediaItem?.let { currentItem ->
+					// Build updated metadata
+					val metadataBuilder = currentItem.mediaMetadata.buildUpon()
+					title?.let { metadataBuilder.setTitle(it) }
+					artist?.let { metadataBuilder.setArtist(it) }
+					
+					val updatedMediaItem = currentItem.buildUpon()
+						.setMediaMetadata(metadataBuilder.build())
+						.build()
+
+					// Capture current state
+					val wasPlaying = enginerBrowser?.isPlaying ?: false
+					val currentPosition = enginerBrowser?.currentPosition ?: 0L
+
+					// Suppress state emissions during metadata update
+					flowSuppressStateEmission = true
+
+					// Replace media item (this is the only way to update notification in Media3)
+					enginerBrowser?.replaceMediaItem(0, updatedMediaItem)
+
+					// Re-enable state emissions after operation completes
+					Handler(Looper.getMainLooper()).postDelayed({
+						flowSuppressStateEmission = false
+						log("Metadata update complete - state emissions re-enabled")
+					}, 300)
+
+					log("MediaItem metadata updated (notification will reflect changes)")
+				}
+			} catch (e: Exception) {
+				flowSuppressStateEmission = false
+				log("Error updating track options:", e.message ?: "unknown")
+			}
 		}
 	}
 

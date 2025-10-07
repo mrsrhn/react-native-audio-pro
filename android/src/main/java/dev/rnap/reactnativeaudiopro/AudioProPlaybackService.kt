@@ -33,6 +33,9 @@ open class AudioProPlaybackService : MediaLibraryService() {
 	companion object {
 		private const val NOTIFICATION_ID = 789
 		private const val CHANNEL_ID = "audio_pro_notification_channel_id"
+		
+		// Static reference to the current session for metadata updates
+		var currentSession: MediaLibrarySession? = null
 	}
 
 	/**
@@ -140,6 +143,8 @@ open class AudioProPlaybackService : MediaLibraryService() {
 				mediaLibrarySession.release()
 				mediaLibrarySession.player.release()
 			}
+			// Clear static reference
+			currentSession = null
 			clearListener()
 		} catch (e: Exception) {
 			android.util.Log.e("AudioProPlaybackService", "Error during service destruction", e)
@@ -239,6 +244,9 @@ open class AudioProPlaybackService : MediaLibraryService() {
 				.also { builder -> getSessionActivityIntent()?.let { builder.setSessionActivity(it) } }
 				.build()
 				.also { mediaLibrarySession ->
+					// Store reference for metadata updates
+					currentSession = mediaLibrarySession
+					
 					// Reserve only one set of controls per session: next/prev or skip, not both.
 					// If both are true, prefer next/prev and log a warning.
 					val extras = mutableMapOf<String, Boolean>()

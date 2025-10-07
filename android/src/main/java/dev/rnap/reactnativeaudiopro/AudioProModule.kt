@@ -94,6 +94,11 @@ class AudioProModule(private val reactContext: ReactApplicationContext) :
 	}
 
 	@ReactMethod
+	fun updateTrackOptions(options: ReadableMap) {
+		AudioProController.updateTrackOptions(options)
+	}
+
+	@ReactMethod
 	fun clear() {
 		AudioProController.clear()
 	}
